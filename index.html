@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async></script>
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- UTIF (TIFF decoder) -->
+<script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#f5f5f0;--surface:#fff;--border:#e0ddd5;
+    --text:#2c2c2c;--sub:#7a7a72;
+    --accent:#3d6b50;--accent-h:#2e5440;
+    --danger:#c44;--radius:8px;
+    --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  html,body{height:100%}
+  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+
+  /* ── Login ── */
+  .login-screen{flex:1;display:flex;align-items:center;justify-content:center}
+  .login-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:48px 56px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:360px;width:100%}
+  .login-icon{font-size:40px;margin-bottom:16px}
+  .login-card h1{font-size:18px;font-weight:700;margin-bottom:8px}
+  .login-card p{font-size:13px;color:var(--sub);margin-bottom:28px;line-height:1.6}
+  .btn-google{width:100%;padding:11px 20px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .15s}
+  .btn-google:hover{background:var(--bg)}
+  .btn-google svg{width:18px;height:18px;flex-shrink:0}
+  .login-error{margin-top:16px;font-size:12px;color:var(--danger);min-height:16px}
+
+  /* ── App ── */
+  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .header .icon{width:26px;height:26px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px}
+  .header h1{font-size:15px;font-weight:700;letter-spacing:.02em}
+  .header .fname{font-size:13px;color:var(--sub);margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .header .user-name{font-size:12px;color:var(--sub);flex-shrink:0}
+
+  .layout{flex:1;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden}
+  .main-panel{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0}
+
+  .toolbar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;box-shadow:var(--shadow)}
+  .divider{width:1px;height:20px;background:var(--border);margin:0 2px}
+  .spacer{flex:1}
+  .rot-label{font-size:12px;color:var(--sub)}
+
+  .btn{padding:7px 14px;border:none;border-radius:var(--radius);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .btn-p{background:var(--accent);color:#fff}
+  .btn-p:hover{background:var(--accent-h)}
+  .btn-s{background:var(--bg);color:var(--text);border:1px solid var(--border)}
+  .btn-s:hover{background:#eae8e0}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+
+  .canvas-panel{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;min-height:0;overflow:hidden;box-shadow:var(--shadow)}
+  .canvas-panel canvas{max-width:100%;max-height:100%}
+  .placeholder{color:var(--sub);font-size:14px;text-align:center;line-height:1.8;padding:40px}
+
+  .status-bar{font-size:12px;color:var(--sub);min-height:16px;flex-shrink:0}
+  .status-bar.error{color:var(--danger)}
+  .status-bar.ok{color:var(--accent)}
+
+  .page-nav{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)}
+  .page-nav .btn{padding:4px 10px;font-size:12px}
+
+  /* ── Sidebar ── */
+  .sidebar{width:140px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;flex-shrink:0;min-height:0;overflow:hidden;box-shadow:var(--shadow)}
+  .sidebar-head{padding:10px 12px;font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);flex-shrink:0}
+  .thumb-list{flex:1;overflow-y:auto;padding:8px 6px;display:flex;flex-direction:column;gap:8px}
+  .thumb-item{cursor:pointer;border-radius:4px;border:2px solid transparent;padding:2px;transition:border-color .15s}
+  .thumb-item:hover{border-color:var(--border)}
+  .thumb-item.active{border-color:var(--accent)}
+  .thumb-item img{width:100%;height:auto;display:block;border-radius:2px;background:var(--bg)}
+  .thumb-label{font-size:10px;color:var(--sub);text-align:center;margin-top:3px}
+
+  /* ── Toast ── */
+  .toast-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;opacity:0;transition:opacity .3s}
+  .toast-overlay.show{opacity:1}
+  .toast-box{background:#2e5440;color:#fff;padding:28px 48px;border-radius:12px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.25)}
+  .toast-box .check{font-size:42px;margin-bottom:8px}
+  .toast-box .msg{font-size:16px;font-weight:700}
+  .toast-box .sub{font-size:13px;margin-top:4px;opacity:.8}
+
+  .ld{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .6s linear infinite;vertical-align:middle}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- ═══ Login Screen ═══ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-icon">⟳</div>
+    <h1>Drive 画像回転ツール</h1>
+    <p>Googleアカウントでログインすると、<br>Google Drive内のファイルを回転・保存できます。</p>
+    <button class="btn-google" onclick="signIn()">
+      <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Googleでログイン
+    </button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ═══ App Screen ═══ -->
+<div id="appScreen" style="display:none;flex:1;flex-direction:column;height:100%">
+
+  <div class="header">
+    <div class="icon">⟳</div>
+    <h1>Drive 画像回転ツール</h1>
+    <span class="fname" id="headerFname"></span>
+    <span class="user-name" id="userName"></span>
+  </div>
+
+  <div class="layout">
+    <div class="main-panel">
+
+      <div class="toolbar">
+        <button class="btn btn-s" onclick="doRotate(-90)" id="btnCCW" disabled>↺ 左90°</button>
+        <button class="btn btn-s" onclick="doRotate(90)"  id="btnCW"  disabled>↻ 右90°</button>
+        <button class="btn btn-s" onclick="doRotate(180)" id="btn180" disabled>↕ 180°</button>
+        <span class="rot-label" id="rotLabel"></span>
+        <div class="divider"></div>
+        <span class="page-nav" id="pageNav" style="display:none">
+          <button class="btn btn-s" onclick="changePage(-1)" id="btnPrev">◀</button>
+          <span id="pageInfo">1/1</span>
+          <button class="btn btn-s" onclick="changePage(1)" id="btnNext">▶</button>
+        </span>
+        <span class="spacer"></span>
+        <button class="btn btn-p" onclick="saveImage()" id="btnSave" disabled>💾 上書き保存</button>
+      </div>
+
+      <div class="canvas-panel">
+        <div class="placeholder" id="placeholder">Driveから「アプリで開く」でファイルを開いてください</div>
+        <canvas id="canvas" style="display:none"></canvas>
+      </div>
+
+      <div class="status-bar" id="status"></div>
+    </div>
+
+    <div class="sidebar" id="sidebar" style="display:none">
+      <div class="sidebar-head">ページ</div>
+      <div class="thumb-list" id="thumbList"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast-overlay" id="toast">
+  <div class="toast-box">
+    <div class="check">✓</div>
+    <div class="msg">保存しました</div>
+    <div class="sub" id="toastSub"></div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────
+   設定: GCPで取得したOAuth 2.0クライアントIDを入力
+───────────────────────────────────────── */
+var CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
+
+/* ═══════════════ Auth ═══════════════ */
+var tokenClient;
+var accessToken = null;
+
+// URLからfileIdを取得（Drive「アプリで開く」対応）
+var pendingFileId = (function() {
+  var p = new URLSearchParams(location.search);
+  var state = p.get('state');
+  if (state) {
+    try {
+      var s = JSON.parse(state);
+      if (s.ids && s.ids[0]) return s.ids[0];
+    } catch(e) {}
+  }
+  return p.get('fileId') || null;
+})();
+
+window.addEventListener('load', function() {
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  // GISライブラリ読み込み待ち
+  var t = setInterval(function() {
+    if (!window.google || !google.accounts) return;
+    clearInterval(t);
+
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive.install',
+        'https://www.googleapis.com/auth/userinfo.profile'
+      ].join(' '),
+      callback: onTokenReceived
+    });
+
+    // fileIdがURLにある場合は自動ログイン試行
+    if (pendingFileId) tokenClient.requestAccessToken({ prompt: '' });
+  }, 100);
+});
+
+function signIn() {
+  document.getElementById('loginError').textContent = '';
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+function onTokenReceived(resp) {
+  if (resp.error) {
+    document.getElementById('loginError').textContent = 'ログインに失敗しました: ' + resp.error;
+    return;
+  }
+  accessToken = resp.access_token;
+  showApp();
+  if (pendingFileId) {
+    loadFileById(pendingFileId);
+    pendingFileId = null;
+  }
+  // ユーザー名表示
+  fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  }).then(function(r){ return r.json(); }).then(function(u){
+    document.getElementById('userName').textContent = u.name || '';
+  });
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  var app = document.getElementById('appScreen');
+  app.style.display = 'flex';
+}
+
+/* ═══════════════ Drive API ═══════════════ */
+function apiFetch(url, type) {
+  return fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } })
+    .then(function(r) {
+      if (r.status === 401) { accessToken = null; throw Object.assign(new Error('Unauthorized'), { status: 401 }); }
+      if (!r.ok) throw new Error('API error: ' + r.status);
+      return type === 'buffer' ? r.arrayBuffer() : r.json();
+    });
+}
+
+function apiSave(fileId, dataUrl) {
+  var parts = dataUrl.split(',');
+  var mime = parts[0].match(/data:(.*?);/)[1];
+  var bin = atob(parts[1]);
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+  var form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify({ name: currentFileName })], { type: 'application/json' }));
+  form.append('file', new Blob([bytes], { type: mime }));
+
+  return fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=multipart', {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + accessToken },
+    body: form
+  }).then(function(r) {
+    if (!r.ok) throw new Error('Save error: ' + r.status);
+    return r.json();
+  });
+}
+
+/* ═══════════════ State ═══════════════ */
+var currentFileId = null;
+var currentFileName = '';
+var currentMimeType = '';
+var totalRotation = 0;
+var originalImage = null;
+
+var pdfDoc = null;
+var pdfPageNum = 1;
+var pdfTotalPages = 0;
+var pdfPageRotations = {};
+
+var tifPages = [];
+var tifPageNum = 0;
+
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+
+/* ═══════════════ File Loading ═══════════════ */
+function loadFileById(fileId) {
+  resetState();
+  currentFileId = fileId;
+  disableButtons(true);
+  setStatus('読み込み中… <span class="ld"></span>');
+
+  Promise.all([
+    apiFetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=name,mimeType'),
+    apiFetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', 'buffer')
+  ]).then(function(results) {
+    var meta = results[0];
+    var buffer = results[1];
+    currentMimeType = meta.mimeType;
+    currentFileName = meta.name;
+    document.getElementById('headerFname').textContent = '— ' + meta.name;
+
+    if (meta.mimeType === 'application/pdf') loadPdf(buffer);
+    else if (meta.mimeType === 'image/tiff') loadTiff(buffer);
+    else loadNormalImage(buffer, meta.mimeType);
+  }).catch(function(e) {
+    if (e.status === 401) {
+      setStatus('セッション切れ。再ログインしてください。', 'error');
+      document.getElementById('appScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+    } else {
+      setStatus('読み込みエラー: ' + e.message, 'error');
+    }
+  });
+}
+
+function resetState() {
+  originalImage = null;
+  pdfDoc = null; pdfPageNum = 1; pdfTotalPages = 0; pdfPageRotations = {};
+  tifPages = []; tifPageNum = 0;
+  totalRotation = 0;
+  canvas.style.display = 'none';
+  document.getElementById('placeholder').style.display = '';
+  document.getElementById('placeholder').textContent = '読み込み中…';
+  document.getElementById('pageNav').style.display = 'none';
+  document.getElementById('rotLabel').textContent = '';
+  document.getElementById('sidebar').style.display = 'none';
+  document.getElementById('thumbList').innerHTML = '';
+  document.getElementById('headerFname').textContent = '';
+}
+
+/* ═══════════════ Normal Image ═══════════════ */
+function loadNormalImage(buffer, mimeType) {
+  var url = URL.createObjectURL(new Blob([buffer], { type: mimeType }));
+  var img = new Image();
+  img.onload = function() {
+    URL.revokeObjectURL(url);
+    originalImage = img;
+    totalRotation = 0;
+    drawRotated(img);
+    disableButtons(false);
+    setStatus(currentFileName + '　' + img.naturalWidth + ' × ' + img.naturalHeight);
+  };
+  img.onerror = function() { setStatus('画像の読み込みに失敗', 'error'); };
+  img.src = url;
+}
+
+/* ═══════════════ TIFF ═══════════════ */
+function loadTiff(buffer) {
+  try {
+    var ifds = UTIF.decode(buffer);
+    tifPages = [];
+    for (var p = 0; p < ifds.length; p++) {
+      UTIF.decodeImage(buffer, ifds[p]);
+      tifPages.push({ width: ifds[p].width, height: ifds[p].height, rgba: UTIF.toRGBA8(ifds[p]) });
+    }
+    if (!tifPages.length) { setStatus('TIFの解析に失敗', 'error'); return; }
+    tifPageNum = 0;
+    pdfPageRotations = {};
+    drawTifPage(0);
+    disableButtons(false);
+    if (tifPages.length > 1) { showPageNav(tifPages.length); buildTifThumbs(); }
+    setStatus(currentFileName + '　' + tifPages[0].width + ' × ' + tifPages[0].height
+      + (tifPages.length > 1 ? '　(' + tifPages.length + 'ページ)' : ''));
+  } catch(e) { setStatus('TIF読み込みエラー: ' + e.message, 'error'); }
+}
+
+function drawTifPage(idx) {
+  var pg = tifPages[idx];
+  var tmp = document.createElement('canvas');
+  tmp.width = pg.width; tmp.height = pg.height;
+  var tc = tmp.getContext('2d');
+  var id = tc.createImageData(pg.width, pg.height);
+  id.data.set(new Uint8Array(pg.rgba));
+  tc.putImageData(id, 0, 0);
+  var img = new Image();
+  img.onload = function() {
+    originalImage = img;
+    totalRotation = pdfPageRotations[idx] || 0;
+    drawRotated(img);
+    updateRotLabel(); updatePageInfo(); updateThumbActive();
+    setStatus(currentFileName + '　' + pg.width + ' × ' + pg.height
+      + '　' + (idx + 1) + '/' + tifPages.length + 'ページ');
+  };
+  img.src = tmp.toDataURL();
+}
+
+/* ═══════════════ PDF ═══════════════ */
+function loadPdf(buffer) {
+  pdfjsLib.getDocument({ data: buffer }).promise.then(function(pdf) {
+    pdfDoc = pdf;
+    pdfTotalPages = pdf.numPages;
+    pdfPageNum = 1;
+    pdfPageRotations = {};
+    renderPdfPage(1);
+    disableButtons(false);
+    if (pdfTotalPages > 1) { showPageNav(pdfTotalPages); buildPdfThumbs(); }
+    setStatus(currentFileName + '　' + pdfTotalPages + 'ページ');
+  }).catch(function(e) { setStatus('PDF読み込みエラー: ' + e.message, 'error'); });
+}
+
+function renderPdfPage(num) {
+  pdfDoc.getPage(num).then(function(page) {
+    var vp = page.getViewport({ scale: 2 });
+    var tmp = document.createElement('canvas');
+    tmp.width = vp.width; tmp.height = vp.height;
+    page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise.then(function() {
+      var img = new Image();
+      img.onload = function() {
+        originalImage = img;
+        totalRotation = pdfPageRotations[num] || 0;
+        drawRotated(img);
+        updateRotLabel(); updatePageInfo(); updateThumbActive();
+        setStatus(currentFileName + '　' + vp.width + ' × ' + vp.height
+          + '　' + num + '/' + pdfTotalPages + 'ページ');
+      };
+      img.src = tmp.toDataURL();
+    });
+  });
+}
+
+/* ═══════════════ Thumbnails ═══════════════ */
+function buildPdfThumbs() {
+  var list = document.getElementById('thumbList');
+  list.innerHTML = '';
+  document.getElementById('sidebar').style.display = '';
+  for (var i = 1; i <= pdfTotalPages; i++) {
+    (function(num) {
+      var item = makeThumbItem(num - 1, num);
+      item.onclick = function() { jumpToPdfPage(num); };
+      list.appendChild(item);
+      var img = item.querySelector('img');
+      pdfDoc.getPage(num).then(function(page) {
+        var vp = page.getViewport({ scale: 0.3 });
+        var tmp = document.createElement('canvas');
+        tmp.width = vp.width; tmp.height = vp.height;
+        page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise.then(function() {
+          img.src = tmp.toDataURL('image/jpeg', 0.7);
+        });
+      });
+    })(i);
+  }
+}
+
+function buildTifThumbs() {
+  var list = document.getElementById('thumbList');
+  list.innerHTML = '';
+  document.getElementById('sidebar').style.display = '';
+  for (var i = 0; i < tifPages.length; i++) {
+    (function(idx) {
+      var pg = tifPages[idx];
+      var item = makeThumbItem(idx, idx + 1);
+      item.onclick = function() { jumpToTifPage(idx); };
+      var scale = Math.min(120 / pg.width, 120 / pg.height, 1);
+      var tw = Math.round(pg.width * scale), th = Math.round(pg.height * scale);
+      var tmp = document.createElement('canvas'); tmp.width = tw; tmp.height = th;
+      var full = document.createElement('canvas'); full.width = pg.width; full.height = pg.height;
+      var fc = full.getContext('2d');
+      var id = fc.createImageData(pg.width, pg.height);
+      id.data.set(new Uint8Array(pg.rgba));
+      fc.putImageData(id, 0, 0);
+      tmp.getContext('2d').drawImage(full, 0, 0, tw, th);
+      item.querySelector('img').src = tmp.toDataURL('image/jpeg', 0.7);
+      list.appendChild(item);
+    })(i);
+  }
+}
+
+function makeThumbItem(dataIdx, labelNum) {
+  var item = document.createElement('div');
+  item.className = 'thumb-item' + (dataIdx === 0 ? ' active' : '');
+  item.dataset.idx = dataIdx;
+  var img = document.createElement('img'); img.alt = labelNum; item.appendChild(img);
+  var lbl = document.createElement('div'); lbl.className = 'thumb-label'; lbl.textContent = labelNum; item.appendChild(lbl);
+  return item;
+}
+
+function jumpToPdfPage(num) {
+  if (num === pdfPageNum) return;
+  saveCurrentPageRot(); pdfPageNum = num; renderPdfPage(num);
+}
+function jumpToTifPage(idx) {
+  if (idx === tifPageNum) return;
+  saveCurrentPageRot(); tifPageNum = idx; drawTifPage(idx);
+}
+function updateThumbActive() {
+  var cur = pdfDoc ? pdfPageNum - 1 : tifPageNum;
+  document.querySelectorAll('.thumb-item').forEach(function(item) {
+    var active = parseInt(item.dataset.idx) === cur;
+    item.classList.toggle('active', active);
+    if (active) item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+}
+
+/* ═══════════════ Page Nav ═══════════════ */
+function showPageNav(total) {
+  document.getElementById('pageNav').style.display = total > 1 ? 'flex' : 'none';
+}
+function changePage(delta) {
+  saveCurrentPageRot();
+  if (pdfDoc) {
+    var n = pdfPageNum + delta;
+    if (n < 1 || n > pdfTotalPages) return;
+    pdfPageNum = n; renderPdfPage(n);
+  } else if (tifPages.length > 1) {
+    var n = tifPageNum + delta;
+    if (n < 0 || n >= tifPages.length) return;
+    tifPageNum = n; drawTifPage(n);
+  }
+}
+function saveCurrentPageRot() {
+  var key = pdfDoc ? pdfPageNum : tifPageNum;
+  if (totalRotation !== 0) pdfPageRotations[key] = totalRotation;
+  else delete pdfPageRotations[key];
+}
+function updatePageInfo() {
+  if (pdfDoc) {
+    document.getElementById('pageInfo').textContent = pdfPageNum + '/' + pdfTotalPages;
+    document.getElementById('btnPrev').disabled = pdfPageNum <= 1;
+    document.getElementById('btnNext').disabled = pdfPageNum >= pdfTotalPages;
+  } else if (tifPages.length > 1) {
+    document.getElementById('pageInfo').textContent = (tifPageNum + 1) + '/' + tifPages.length;
+    document.getElementById('btnPrev').disabled = tifPageNum <= 0;
+    document.getElementById('btnNext').disabled = tifPageNum >= tifPages.length - 1;
+  }
+}
+
+/* ═══════════════ Rotation ═══════════════ */
+function doRotate(deg) {
+  if (!originalImage) return;
+  totalRotation = ((totalRotation + deg) % 360 + 360) % 360;
+  if (pdfDoc || tifPages.length > 1) saveCurrentPageRot();
+  drawRotated(originalImage);
+  updateRotLabel();
+}
+function drawRotated(img) {
+  var swap = totalRotation === 90 || totalRotation === 270;
+  var w = swap ? img.naturalHeight : img.naturalWidth;
+  var h = swap ? img.naturalWidth  : img.naturalHeight;
+  canvas.width = w; canvas.height = h;
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate(totalRotation * Math.PI / 180);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  ctx.restore();
+  canvas.style.display = 'block';
+  document.getElementById('placeholder').style.display = 'none';
+}
+function updateRotLabel() {
+  document.getElementById('rotLabel').textContent = totalRotation ? '回転: ' + totalRotation + '°' : '';
+}
+
+/* ═══════════════ Save ═══════════════ */
+function saveImage() {
+  if (!currentFileId || !originalImage) return;
+  saveCurrentPageRot();
+  var hasRot = false;
+  if (pdfDoc || tifPages.length > 1) { for (var k in pdfPageRotations) { hasRot = true; break; } }
+  else hasRot = totalRotation !== 0;
+  if (!hasRot) { setStatus('回転されていません', 'error'); return; }
+  setStatus('保存中… <span class="ld"></span>');
+  disableButtons(true);
+  if (pdfDoc) savePdf();
+  else if (tifPages.length > 1) saveTifAsPdf();
+  else saveSingleImage();
+}
+
+function saveSingleImage() {
+  var outType = currentMimeType === 'image/jpeg' ? 'image/jpeg'
+              : currentMimeType === 'image/webp' ? 'image/webp' : 'image/png';
+  doSave(canvas.toDataURL(outType, outType === 'image/jpeg' ? 0.92 : undefined));
+}
+
+function savePdf() {
+  var jsPDF = window.jspdf.jsPDF, doc = null, done = 0;
+  function processPage(num) {
+    pdfDoc.getPage(num).then(function(page) {
+      var vp = page.getViewport({ scale: 2 });
+      var tmp = document.createElement('canvas'); tmp.width = vp.width; tmp.height = vp.height;
+      page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise.then(function() {
+        var rc = applyRotation(tmp, pdfPageRotations[num] || 0);
+        var pw = rc.width, ph = rc.height;
+        if (!doc) doc = new jsPDF({ orientation: pw > ph ? 'l' : 'p', unit: 'px', format: [pw, ph] });
+        else doc.addPage([pw, ph], pw > ph ? 'l' : 'p');
+        doc.addImage(rc.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, ph);
+        done++;
+        setStatus('保存中… ' + done + '/' + pdfTotalPages + ' <span class="ld"></span>');
+        if (num < pdfTotalPages) processPage(num + 1);
+        else doSave(doc.output('datauristring'));
+      });
+    });
+  }
+  processPage(1);
+}
+
+function saveTifAsPdf() {
+  var jsPDF = window.jspdf.jsPDF, doc = null;
+  for (var i = 0; i < tifPages.length; i++) {
+    var pg = tifPages[i];
+    var tmp = document.createElement('canvas'); tmp.width = pg.width; tmp.height = pg.height;
+    var tc = tmp.getContext('2d');
+    var id = tc.createImageData(pg.width, pg.height);
+    id.data.set(new Uint8Array(pg.rgba)); tc.putImageData(id, 0, 0);
+    var rc = applyRotation(tmp, pdfPageRotations[i] || 0);
+    var pw = rc.width, ph = rc.height;
+    if (!doc) doc = new jsPDF({ orientation: pw > ph ? 'l' : 'p', unit: 'px', format: [pw, ph] });
+    else doc.addPage([pw, ph], pw > ph ? 'l' : 'p');
+    doc.addImage(rc.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, ph);
+  }
+  doSave(doc.output('datauristring'));
+}
+
+function applyRotation(src, deg) {
+  if (deg === 0) return src;
+  var swap = deg === 90 || deg === 270;
+  var w = swap ? src.height : src.width, h = swap ? src.width : src.height;
+  var c = document.createElement('canvas'); c.width = w; c.height = h;
+  var cx = c.getContext('2d');
+  cx.translate(w / 2, h / 2); cx.rotate(deg * Math.PI / 180);
+  cx.drawImage(src, -src.width / 2, -src.height / 2);
+  return c;
+}
+
+function doSave(dataUrl) {
+  apiSave(currentFileId, dataUrl).then(function() {
+    showToast(currentFileName);
+    setStatus('✔ 保存完了', 'ok');
+    if (!pdfDoc && tifPages.length <= 1) {
+      var saved = new Image();
+      saved.onload = function() {
+        originalImage = saved; totalRotation = 0;
+        drawRotated(saved); updateRotLabel(); disableButtons(false);
+      };
+      saved.src = canvas.toDataURL();
+    } else {
+      pdfPageRotations = {}; totalRotation = 0;
+      updateRotLabel(); disableButtons(false);
+    }
+  }).catch(function(e) {
+    setStatus('保存エラー: ' + e.message, 'error');
+    disableButtons(false);
+  });
+}
+
+/* ═══════════════ Toast / Helpers ═══════════════ */
+function showToast(fileName) {
+  document.getElementById('toastSub').textContent = fileName;
+  var el = document.getElementById('toast');
+  el.classList.add('show');
+  setTimeout(function(){ el.classList.remove('show'); }, 2200);
+}
+function disableButtons(d) {
+  ['btnCCW','btnCW','btn180','btnSave'].forEach(function(id){
+    document.getElementById(id).disabled = d;
+  });
+}
+function setStatus(msg, type) {
+  var el = document.getElementById('status');
+  el.className = 'status-bar' + (type ? ' ' + type : '');
+  el.innerHTML = msg;
+}
+</script>
+</body>
+</html>
