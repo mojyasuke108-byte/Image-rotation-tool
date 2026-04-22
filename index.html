@@ -198,7 +198,7 @@ window.addEventListener('load', function() {
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: [
-        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive',
         'https://www.googleapis.com/auth/drive.install',
         'https://www.googleapis.com/auth/userinfo.profile'
       ].join(' '),
@@ -266,7 +266,7 @@ function apiSave(fileId, dataUrl) {
     headers: { Authorization: 'Bearer ' + accessToken },
     body: form
   }).then(function(r) {
-    if (!r.ok) throw new Error('Save error: ' + r.status);
+    if (!r.ok) return r.text().then(function(t) { throw new Error('HTTP ' + r.status + ': ' + t); });
     return r.json();
   });
 }
