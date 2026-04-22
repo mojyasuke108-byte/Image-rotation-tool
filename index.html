@@ -202,36 +202,46 @@ window.addEventListener('load', function() {
         'https://www.googleapis.com/auth/drive.install',
         'https://www.googleapis.com/auth/userinfo.profile'
       ].join(' '),
-      callback: onTokenReceived
+      callback: onTokenReceived,
+      error_callback: function() { showLoginScreen(); }
     });
 
-    // fileIdがURLにある場合は自動ログイン試行
-    if (pendingFileId) tokenClient.requestAccessToken({ prompt: '' });
+    // 前回ログイン済みなら自動でサイレント取得を試みる
+    if (localStorage.getItem('loggedIn')) {
+      tokenClient.requestAccessToken({ prompt: '' });
+    } else {
+      showLoginScreen();
+    }
   }, 100);
 });
 
 function signIn() {
   document.getElementById('loginError').textContent = '';
-  tokenClient.requestAccessToken({ prompt: 'consent' });
+  tokenClient.requestAccessToken({ prompt: '' });
 }
 
 function onTokenReceived(resp) {
   if (resp.error) {
+    showLoginScreen();
     document.getElementById('loginError').textContent = 'ログインに失敗しました: ' + resp.error;
     return;
   }
   accessToken = resp.access_token;
+  localStorage.setItem('loggedIn', '1');
   showApp();
   if (pendingFileId) {
     loadFileById(pendingFileId);
     pendingFileId = null;
   }
-  // ユーザー名表示
   fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
     headers: { Authorization: 'Bearer ' + accessToken }
   }).then(function(r){ return r.json(); }).then(function(u){
     document.getElementById('userName').textContent = u.name || '';
   });
+}
+
+function showLoginScreen() {
+  document.getElementById('loginScreen').style.display = 'flex';
 }
 
 function showApp() {
